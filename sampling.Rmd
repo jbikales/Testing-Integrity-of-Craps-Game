@@ -1,0 +1,85 @@
+---
+title: "sampling"
+author: "James Bikales"
+date: "3/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(googlesheets4)
+library(janitor)
+library(infer)
+library(tidyverse)
+sheets_deauth()
+# There is nothing wrong with reading in, and cleaning up, your data in the
+# setup R code chunk. But, to be honest, I am just doing this here because I
+# couldn't figure out how to turn off the message from read_sheet.
+x <- read_sheet(ss =  "14HmwN2cEVAJHupuehCuLdwG9BXtR3COrxDgaaylLhkA") %>% 
+  clean_names() %>% 
+  mutate(perc_red = red / (red + white))
+```
+
+
+```{r class_results}
+# I don't really like this plot. There are only 26 allowed values, from 0% to
+# 100% in increments of 4%. So, I should be able to see separate points. But I
+# could never get that to work, even using geom_bar() and other tricks. Ahh. Now
+# I look at the data and see that there are several impossible (?) points: 8.7%,
+# 19%, 25% and 77%. Is that bad data?
+# I cleaned that up after class. It was too annoying to deal with.
+x %>% 
+  ggplot(aes(perc_red)) +
+    geom_histogram(bins = 20) +
+    labs(title = "Percentage of Red Beads Drawn",
+        subtitle = "Should we be suspicious of those outliers?",
+        caption = "Classroom data from 2020-03-03",
+        x = "Percentage of Red Beads Out of 25 Drawn",
+        y = "Count") 
+```
+
+
+```{r create_function}
+# First we need an urn
+my_urn <- tibble(bean_ID = 1:10000,
+              color = c(rep("Red", 2000), rep("White", 8000)))
+# Then we need to simulate one sample from the urn
+# calculate percentage red in this sample
+one_run <- my_urn %>% 
+  rep_sample_n(size = 25, reps = 1) %>% 
+  summarize(red_sum = sum(color == "Red")) %>% 
+  mutate(perc_red = red_sum/25)
+# Then we do this X times. What is X? I don't I need a group_by somewhere?
+# Let's make a function which does one run of what we did in the class, which
+# involved 51 teams, each sampling 25 beads and reporting the results.
+simulate_class <- function(urn){
+  urn %>% 
+  rep_sample_n(size = 25, reps = 51) %>% 
+  group_by(replicate) %>% 
+  summarize(red_sum = sum(color == "Red")) %>% 
+  mutate(perc_red = red_sum/25)
+}
+```
+
+```{r do_sim}
+# Need to simulate class lots of times. Best to use a tibble to organize this
+# information. Each row in the tibble is another simulation. First column is
+# usual a counter or id that I just used to keep track of things, like bead_ID
+# above. Second column is where I store the result. But the result of
+# simulate_class is a tibble, not a singe number. So, I need to use a map
+# function.
+sim_results <- tibble(sim_ID = 1:3,
+                      results = map(sim_ID, ~ simulate_class(my_urn)))
+```
+
+```{r sim_graphic}
+## Make a map from one of the simulation results. 
+sim_results[[2]][[2]] %>% 
+  ggplot(aes(perc_red)) +
+    geom_histogram(bins = 20) +
+    labs(title = "Percentage of Red Beads Drawn",
+        subtitle = "Does this look like the results from class?",
+        caption = "Simulated Data",
+        x = "Percentage of Red Beads Out of 25 Drawn",
+        y = "Count") 
+```
